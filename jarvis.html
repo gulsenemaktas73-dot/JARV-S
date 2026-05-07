@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>J.A.R.V.I.S.</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+:root{
+  --cyan:#00d4ff;--cyan-dim:#0099bb;--dark:#020b18;--darker:#010810;
+  --panel:rgba(0,212,255,0.04);--border:rgba(0,212,255,0.2);
+  --glow:0 0 20px rgba(0,212,255,0.4);--glow-strong:0 0 40px rgba(0,212,255,0.7);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--darker);color:var(--cyan);font-family:'Share Tech Mono',monospace;height:100vh;overflow:hidden;}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,212,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,0.03) 1px,transparent 1px);background-size:40px 40px;animation:gridMove 20s linear infinite;pointer-events:none;}
+@keyframes gridMove{0%{transform:translateY(0)}100%{transform:translateY(40px)}}
+body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.08) 2px,rgba(0,0,0,0.08) 4px);pointer-events:none;z-index:100;}
+.scan-line{position:fixed;top:0;left:0;width:100%;height:2px;background:linear-gradient(90deg,transparent,rgba(0,212,255,.5),transparent);animation:scanDown 8s linear infinite;pointer-events:none;z-index:99;}
+@keyframes scanDown{0%{top:0;opacity:1}90%{opacity:.3}100%{top:100vh;opacity:0}}
+.corner{position:fixed;width:45px;height:45px;z-index:50;}
+.corner::before,.corner::after{content:'';position:absolute;background:var(--cyan);}
+.corner::before{width:100%;height:2px;}.corner::after{width:2px;height:100%;}
+.corner-tl{top:8px;left:8px}.corner-tr{top:8px;right:8px;transform:scaleX(-1)}
+.corner-bl{bottom:8px;left:8px;transform:scaleY(-1)}.corner-br{bottom:8px;right:8px;transform:scale(-1)}
+
+/* ── SETTINGS PANEL ── */
+.settings-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:500;backdrop-filter:blur(6px);}
+.settings-overlay.open{display:flex;align-items:center;justify-content:center;}
+.settings-panel{border:1px solid var(--cyan);background:#010d1a;width:min(90vw,420px);max-height:85vh;overflow-y:auto;padding:20px;position:relative;}
+.settings-title{font-family:'Orbitron',monospace;font-size:14px;font-weight:900;letter-spacing:4px;margin-bottom:16px;text-shadow:var(--glow);}
+.settings-close{position:absolute;top:12px;right:12px;background:transparent;border:1px solid var(--border);color:var(--cyan);width:28px;height:28px;cursor:pointer;font-size:12px;font-family:'Orbitron',monospace;}
+.settings-close:hover{border-color:var(--cyan);box-shadow:var(--glow);}
+.settings-section{margin-bottom:20px;}
+.settings-section-title{font-size:9px;letter-spacing:3px;color:var(--cyan-dim);font-family:'Orbitron',monospace;margin-bottom:10px;border-bottom:1px solid var(--border);padding-bottom:4px;}
+
+/* Permission buttons */
+.perm-btn{display:flex;align-items:center;justify-content:space-between;width:100%;background:transparent;border:1px solid var(--border);color:var(--cyan);padding:8px 12px;margin-bottom:6px;cursor:pointer;font-family:'Share Tech Mono',monospace;font-size:12px;transition:all .2s;}
+.perm-btn:hover{border-color:var(--cyan);box-shadow:var(--glow);}
+.perm-status{font-size:9px;letter-spacing:1px;padding:2px 8px;border:1px solid;}
+.perm-status.granted{color:#00ff88;border-color:#00ff88;}
+.perm-status.denied{color:#ff4444;border-color:#ff4444;}
+.perm-status.unknown{color:#ffaa00;border-color:#ffaa00;}
+
+/* Contact list */
+.contact-list{display:flex;flex-direction:column;gap:6px;margin-bottom:10px;}
+.contact-item{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border:1px solid var(--border);font-size:12px;}
+.contact-name{color:var(--cyan);}
+.contact-num{color:var(--cyan-dim);font-size:10px;}
+.contact-del{background:transparent;border:none;color:#ff4444;cursor:pointer;font-size:14px;padding:0 4px;}
+.contact-add-row{display:flex;gap:6px;margin-top:6px;}
+.settings-input{flex:1;background:transparent;border:1px solid var(--border);color:var(--cyan);padding:7px 10px;font-family:'Share Tech Mono',monospace;font-size:12px;outline:none;}
+.settings-input:focus{border-color:var(--cyan);}
+.settings-input::placeholder{color:rgba(0,212,255,.3);}
+.add-btn{background:var(--cyan);color:var(--dark);border:none;padding:7px 14px;font-family:'Orbitron',monospace;font-size:10px;font-weight:700;cursor:pointer;letter-spacing:1px;}
+.add-btn:hover{box-shadow:var(--glow);}
+
+/* ── APP LAYOUT ── */
+.app{display:grid;grid-template-rows:auto auto 1fr auto auto;height:100vh;padding:16px;gap:7px;position:relative;z-index:10;}
+
+/* ── HEADER ── */
+header{display:flex;align-items:center;justify-content:space-between;padding:9px 14px;border:1px solid var(--border);background:var(--panel);backdrop-filter:blur(10px);position:relative;overflow:hidden;}
+header::before{content:'';position:absolute;top:0;left:0;width:100%;height:2px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:scanH 3s linear infinite;}
+@keyframes scanH{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+.logo{font-family:'Orbitron',monospace;font-size:clamp(11px,3vw,17px);font-weight:900;letter-spacing:5px;text-shadow:var(--glow-strong);animation:logoPulse 2s ease-in-out infinite;}
+@keyframes logoPulse{0%,100%{opacity:1}50%{opacity:.8}}
+.clock-display{text-align:center;}
+.clock-time{font-family:'Orbitron',monospace;font-size:clamp(13px,4vw,20px);font-weight:700;letter-spacing:3px;text-shadow:var(--glow);}
+.clock-date{font-size:8px;color:var(--cyan-dim);letter-spacing:2px;margin-top:2px;}
+.header-right{display:flex;align-items:center;gap:8px;}
+.arc-reactor{display:flex;flex-direction:column;align-items:center;}
+.reactor-ring{border-radius:50%;border:1px solid var(--cyan);animation:spin 3s linear infinite;}
+.reactor-ring:nth-child(1){width:26px;height:26px;box-shadow:0 0 7px var(--cyan);}
+.reactor-ring:nth-child(2){width:16px;height:16px;margin-top:-21px;border-color:#00ff88;animation-duration:5s;animation-direction:reverse;}
+.reactor-core{width:6px;height:6px;background:var(--cyan);border-radius:50%;margin-top:-11px;animation:corePulse 1s ease-in-out infinite;}
+@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+@keyframes corePulse{0%,100%{box-shadow:0 0 8px var(--cyan)}50%{box-shadow:0 0 20px var(--cyan),0 0 40px var(--cyan)}}
+.status-bar{display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-size:8px;letter-spacing:1px;color:var(--cyan-dim);}
+.status-dot{display:inline-block;width:5px;height:5px;background:#00ff88;border-radius:50%;box-shadow:0 0 5px #00ff88;animation:blink 1.5s ease-in-out infinite;vertical-align:middle;margin-right:3px;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+.settings-btn{background:transparent;border:1px solid var(--border);color:var(--cyan-dim);width:28px;height:28px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0;}
+.settings-btn:hover{border-color:var(--cyan);color:var(--cyan);box-shadow:var(--glow);}
+
+/* ── STATS ── */
+.stats-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;}
+.stat-card{border:1px solid var(--border);background:var(--panel);padding:5px 7px;text-align:center;position:relative;overflow:hidden;}
+.stat-card::before{content:'';position:absolute;top:0;left:0;width:100%;height:1px;background:var(--cyan);opacity:.3;}
+.stat-label{font-size:7px;letter-spacing:1px;color:var(--cyan-dim);font-family:'Orbitron',monospace;}
+.stat-value{font-size:clamp(10px,2.5vw,13px);font-weight:700;color:var(--cyan);margin-top:2px;font-family:'Orbitron',monospace;}
+.stat-value.warn{color:#ffaa00;}.stat-value.danger{color:#ff4444;}.stat-value.good{color:#00ff88;}
+
+/* ── CHAT ── */
+.chat-container{display:flex;flex-direction:column;gap:8px;overflow-y:auto;padding:10px;border:1px solid var(--border);background:var(--panel);backdrop-filter:blur(10px);scrollbar-width:thin;scrollbar-color:var(--cyan-dim) transparent;}
+.chat-container::-webkit-scrollbar{width:3px;}.chat-container::-webkit-scrollbar-thumb{background:var(--cyan-dim);border-radius:2px;}
+.message{display:flex;gap:8px;animation:fadeIn .35s ease;max-width:90%;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.message.user{align-self:flex-end;flex-direction:row-reverse;}
+.avatar{width:28px;height:28px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:8px;flex-shrink:0;font-family:'Orbitron',monospace;font-weight:700;}
+.message.jarvis .avatar{background:rgba(0,212,255,.1);color:var(--cyan);box-shadow:var(--glow);}
+.message.user .avatar{background:rgba(0,68,255,.2);border-color:rgba(0,68,255,.4);color:#6699ff;}
+.bubble{padding:8px 12px;border:1px solid;font-size:clamp(11px,2vw,13px);line-height:1.6;}
+.message.jarvis .bubble{border-color:var(--border);background:rgba(0,212,255,.05);color:#a0e8f8;}
+.message.user .bubble{border-color:rgba(0,68,255,.3);background:rgba(0,68,255,.08);color:#8aacff;}
+.sender-label{font-size:8px;letter-spacing:2px;color:var(--cyan-dim);margin-bottom:3px;font-family:'Orbitron',monospace;}
+.typing{display:flex;gap:4px;align-items:center;padding:8px 12px;}
+.typing span{width:5px;height:5px;background:var(--cyan);border-radius:50%;animation:dot 1.2s ease-in-out infinite;}
+.typing span:nth-child(2){animation-delay:.2s}.typing span:nth-child(3){animation-delay:.4s}
+@keyframes dot{0%,60%,100%{opacity:.3;transform:scale(.8)}30%{opacity:1;transform:scale(1.2)}}
+
+/* ── CARDS ── */
+.wa-card{margin-top:8px;border:1px solid rgba(37,211,102,.4);background:rgba(37,211,102,.06);padding:10px 12px;}
+.wa-card-label{font-size:8px;letter-spacing:2px;color:#25d366;margin-bottom:5px;font-family:'Orbitron',monospace;}
+.wa-card p{font-size:11px;color:#a0e8f8;margin-bottom:8px;line-height:1.5;}
+.wa-btn{display:inline-block;background:#25d366;color:#000;font-family:'Orbitron',monospace;font-size:10px;font-weight:700;letter-spacing:2px;padding:7px 14px;text-decoration:none;transition:all .2s;}
+.wa-btn:hover{background:#1aad52;box-shadow:0 0 12px rgba(37,211,102,.5);}
+
+.gmail-card{margin-top:8px;border:1px solid rgba(234,67,53,.4);background:rgba(234,67,53,.06);padding:10px 12px;}
+.gmail-card-label{font-size:8px;letter-spacing:2px;color:#ea4335;margin-bottom:5px;font-family:'Orbitron',monospace;}
+.gmail-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;}
+.gmail-btn{display:inline-block;background:#ea4335;color:#fff;font-family:'Orbitron',monospace;font-size:9px;font-weight:700;letter-spacing:1px;padding:6px 12px;text-decoration:none;transition:all .2s;border:none;cursor:pointer;}
+.gmail-btn:hover{background:#c5221f;}
+.gmail-btn.sec{background:transparent;border:1px solid #ea4335;color:#ea4335;}
+.gmail-btn.sec:hover{background:#ea4335;color:#fff;}
+
+.task-card{margin-top:8px;border:1px solid rgba(255,170,0,.4);background:rgba(255,170,0,.05);padding:10px 12px;}
+.task-card-label{font-size:8px;letter-spacing:2px;color:#ffaa00;margin-bottom:6px;font-family:'Orbitron',monospace;}
+.task-list{list-style:none;display:flex;flex-direction:column;gap:4px;}
+.task-item{display:flex;align-items:center;gap:8px;font-size:11px;color:#a0e8f8;}
+.task-check{width:13px;height:13px;border:1px solid #ffaa00;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:9px;}
+.task-check.done{background:#ffaa00;color:#000;}
+.task-text.done{text-decoration:line-through;opacity:.5;}
+
+.weather-card{margin-top:8px;border:1px solid rgba(100,180,255,.4);background:rgba(100,180,255,.05);padding:10px 12px;}
+.weather-card-label{font-size:8px;letter-spacing:2px;color:#64b4ff;margin-bottom:5px;font-family:'Orbitron',monospace;}
+.weather-big{font-family:'Orbitron',monospace;font-size:24px;font-weight:700;color:var(--cyan);text-shadow:var(--glow);}
+
+.health-card{margin-top:8px;border:1px solid rgba(255,100,150,.4);background:rgba(255,100,150,.05);padding:10px 12px;}
+.health-card-label{font-size:8px;letter-spacing:2px;color:#ff6496;margin-bottom:6px;font-family:'Orbitron',monospace;}
+.health-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+.health-item{text-align:center;}
+.health-val{font-family:'Orbitron',monospace;font-size:18px;font-weight:700;color:#ff6496;}
+.health-lbl{font-size:8px;color:var(--cyan-dim);letter-spacing:1px;}
+
+/* ── VOICE STATUS ── */
+#voiceStatus{display:none;font-size:9px;letter-spacing:2px;color:#ff4444;text-align:center;padding:3px;font-family:'Orbitron',monospace;animation:logoPulse 1s ease-in-out infinite;}
+#voiceStatus.active{display:block;}
+
+/* ── INPUT ── */
+.input-area{display:flex;gap:7px;padding:9px 13px;border:1px solid var(--border);background:var(--panel);backdrop-filter:blur(10px);align-items:center;position:relative;}
+.input-area::before{content:'> STARK_COM //';font-size:8px;letter-spacing:2px;color:var(--cyan-dim);position:absolute;top:-13px;left:13px;}
+#userInput{flex:1;background:transparent;border:none;outline:none;color:var(--cyan);font-family:'Share Tech Mono',monospace;font-size:clamp(12px,2vw,14px);caret-color:var(--cyan);letter-spacing:1px;}
+#userInput::placeholder{color:rgba(0,212,255,.25);letter-spacing:1px;}
+.mic-btn{width:34px;height:34px;background:transparent;border:1px solid var(--cyan);color:var(--cyan);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .2s;flex-shrink:0;font-size:14px;}
+.mic-btn:hover{box-shadow:var(--glow);}
+.mic-btn.listening{border-color:#ff4444;color:#ff4444;animation:micPulse 1s ease-out infinite;}
+@keyframes micPulse{0%{box-shadow:0 0 0 0 rgba(255,68,68,.6)}70%{box-shadow:0 0 0 10px rgba(255,68,68,0)}100%{box-shadow:0 0 0 0 rgba(255,68,68,0)}}
+.send-btn{background:transparent;border:1px solid var(--cyan);color:var(--cyan);padding:7px 13px;font-family:'Orbitron',monospace;font-size:9px;font-weight:700;letter-spacing:2px;cursor:pointer;transition:all .2s;position:relative;overflow:hidden;flex-shrink:0;}
+.send-btn::before{content:'';position:absolute;inset:0;background:var(--cyan);transform:scaleX(0);transform-origin:left;transition:transform .2s;z-index:-1;}
+.send-btn:hover{color:var(--dark);box-shadow:var(--glow);}.send-btn:hover::before{transform:scaleX(1);}
+
+@media(max-width:480px){
+  .app{padding:8px;gap:5px;}
+  .corner{width:24px;height:24px;}
+  .status-bar .pil-text{display:none;}
+  .stats-bar{grid-template-columns:repeat(2,1fr);}
+}
+</style>
+</head>
+<body>
+<div class="scan-line"></div>
+<div class="corner corner-tl"></div><div class="corner corner-tr"></div>
+<div class="corner corner-bl"></div><div class="corner corner-br"></div>
+
+<!-- SETTINGS PANEL -->
+<div class="settings-overlay" id="settingsOverlay" onclick="if(event.target===this)closeSettings()">
+  <div class="settings-panel">
+    <div class="settings-title">⚙ JARVIS AYARLARI</div>
+    <button class="settings-close" onclick="closeSettings()">✕</button>
+
+    <!-- Permissions -->
+    <div class="settings-section">
+      <div class="settings-section-title">// İZİNLER</div>
+      <button class="perm-btn" onclick="requestMic()">
+        <span>🎙 Mikrofon</span>
+        <span class="perm-status unknown" id="permMic">KONTROL ET</span>
+      </button>
+      <button class="perm-btn" onclick="requestLocation()">
+        <span>📍 Konum (Hava Durumu)</span>
+        <span class="perm-status unknown" id="permLoc">KONTROL ET</span>
+      </button>
+    </div>
+
+    <!-- Contacts / Rehber -->
+    <div class="settings-section">
+      <div class="settings-section-title">// JARVIS REHBERİ</div>
+      <div class="contact-list" id="contactList"></div>
+      <div class="contact-add-row">
+        <input class="settings-input" id="newContactName" placeholder="İsim (örn: Ahmet)" />
+        <input class="settings-input" id="newContactNum" placeholder="05xxxxxxxxx" type="tel" />
+        <button class="add-btn" onclick="addContact()">EKLE</button>
+      </div>
+    </div>
+
+    <!-- Health manual input -->
+    <div class="settings-section">
+      <div class="settings-section-title">// SAĞLIK VERİSİ (MANUEL)</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <input class="settings-input" id="manualHeart" placeholder="Nabız (BPM)" type="number" style="width:130px;"/>
+        <input class="settings-input" id="manualSteps" placeholder="Adım sayısı" type="number" style="width:130px;"/>
+        <button class="add-btn" onclick="saveHealthManual()">KAYDET</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div class="app">
+  <header>
+    <div class="logo">J.A.R.V.I.S.</div>
+    <div class="clock-display">
+      <div class="clock-time" id="clockTime">--:--:--</div>
+      <div class="clock-date" id="clockDate">---</div>
+    </div>
+    <div class="header-right">
+      <div class="arc-reactor">
+        <div class="reactor-ring"></div><div class="reactor-ring"></div>
+        <div class="reactor-core"></div>
+      </div>
+      <div class="status-bar">
+        <div><span class="status-dot"></span>ONLINE</div>
+        <div class="pil-text" id="headerBattery">PIl: --%</div>
+      </div>
+      <button class="settings-btn" onclick="openSettings()" title="Ayarlar">⚙</button>
+    </div>
+  </header>
+
+  <div class="stats-bar">
+    <div class="stat-card"><div class="stat-label">NABIZ</div><div class="stat-value good" id="statHeart">-- BPM</div></div>
+    <div class="stat-card"><div class="stat-label">PIl</div><div class="stat-value good" id="statBattery">--%</div></div>
+    <div class="stat-card"><div class="stat-label">HAVA</div><div class="stat-value" id="statWeather">--°C</div></div>
+    <div class="stat-card"><div class="stat-label">ADIM</div><div class="stat-value" id="statSteps">--</div></div>
+  </div>
+
+  <div class="chat-container" id="chatBox">
+    <div class="message jarvis">
+      <div class="avatar">AI</div>
+      <div>
+        <div class="sender-label">J.A.R.V.I.S.</div>
+        <div class="bubble">Günaydın, Bay Stark. Tüm sistemler aktif. İzinler ve rehber için sağ üstteki <b>⚙</b> butonunu kullanın. Komutlarınızı bekliyorum.</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="voiceStatus">🔴 DİNLİYORUM — KONUŞUN BAY STARK</div>
+
+  <div class="input-area">
+    <button class="mic-btn" id="micBtn" onclick="toggleMic()" title="Sesli komut">🎙</button>
+    <input type="text" id="userInput" placeholder="Komut girin veya 🎙 basın..." autocomplete="off"/>
+    <button class="send-btn" onclick="sendMessage()">GÖNDER</button>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════
+// CLOCK
+// ═══════════════════════════════════════
+const DAYS=['Pazar','Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi'];
+const MONTHS=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+const pad=v=>String(v).padStart(2,'0');
+function updateClock(){
+  const n=new Date();
+  document.getElementById('clockTime').textContent=`${pad(n.getHours())}:${pad(n.getMinutes())}:${pad(n.getSeconds())}`;
+  document.getElementById('clockDate').textContent=`${DAYS[n.getDay()]} ${n.getDate()} ${MONTHS[n.getMonth()]} ${n.getFullYear()}`;
+}
+updateClock();setInterval(updateClock,1000);
+function nowStr(){const n=new Date();return `${pad(n.getHours())}:${pad(n.getMinutes())}:${pad(n.getSeconds())}, ${DAYS[n.getDay()]} ${n.getDate()} ${MONTHS[n.getMonth()]} ${n.getFullYear()}`;}
+
+// ═══════════════════════════════════════
+// SETTINGS PANEL
+// ═══════════════════════════════════════
+function openSettings(){document.getElementById('settingsOverlay').classList.add('open');renderContactList();checkPermissions();}
+function closeSettings(){document.getElementById('settingsOverlay').classList.remove('open');}
+
+// ═══════════════════════════════════════
+// PERMISSIONS
+// ═══════════════════════════════════════
+async function checkPermissions(){
+  try{
+    const m=await navigator.permissions.query({name:'microphone'});
+    setPermUI('permMic',m.state);
+    const l=await navigator.permissions.query({name:'geolocation'});
+    setPermUI('permLoc',l.state);
+  }catch(e){}
+}
+function setPermUI(id,state){
+  const el=document.getElementById(id);
+  if(state==='granted'){el.textContent='VERİLDİ ✓';el.className='perm-status granted';}
+  else if(state==='denied'){el.textContent='REDDEDİLDİ ✗';el.className='perm-status denied';}
+  else{el.textContent='İZİN İSTE';el.className='perm-status unknown';}
+}
+async function requestMic(){
+  try{
+    const s=await navigator.mediaDevices.getUserMedia({audio:true});
+    s.getTracks().forEach(t=>t.stop());
+    setPermUI('permMic','granted');
+    appendMessage('jarvis','Mikrofon izni verildi, Bay Stark. Sesli komutlar aktif.');
+  }catch(e){
+    setPermUI('permMic','denied');
+    appendMessage('jarvis','Mikrofon izni reddedildi. Tarayıcı ayarlarından manuel olarak verin.');
+  }
+}
+async function requestLocation(){
+  navigator.geolocation.getCurrentPosition(
+    async()=>{setPermUI('permLoc','granted');await fetchWeather();appendMessage('jarvis','Konum izni verildi. Hava durumu güncellendi.');},
+    ()=>{setPermUI('permLoc','denied');appendMessage('jarvis','Konum izni reddedildi. Hava durumu kullanılamıyor.');}
+  );
+}
+
+// ═══════════════════════════════════════
+// CONTACTS / REHBER
+// ═══════════════════════════════════════
+function getContacts(){return JSON.parse(localStorage.getItem('jarvis_contacts')||'[]');}
+function saveContacts(c){localStorage.setItem('jarvis_contacts',JSON.stringify(c));}
+
+function addContact(){
+  const name=document.getElementById('newContactName').value.trim();
+  const num=document.getElementById('newContactNum').value.trim();
+  if(!name||!num){alert('İsim ve numara girin!');return;}
+  const contacts=getContacts();
+  contacts.push({name,num});
+  saveContacts(contacts);
+  document.getElementById('newContactName').value='';
+  document.getElementById('newContactNum').value='';
+  renderContactList();
+}
+
+function renderContactList(){
+  const contacts=getContacts();
+  const el=document.getElementById('contactList');
+  if(contacts.length===0){el.innerHTML='<div style="font-size:11px;color:var(--cyan-dim)">Henüz kişi eklenmedi.</div>';return;}
+  el.innerHTML=contacts.map((c,i)=>`
+    <div class="contact-item">
+      <div><div class="contact-name">${c.name}</div><div class="contact-num">${c.num}</div></div>
+      <button class="contact-del" onclick="deleteContact(${i})">🗑</button>
+    </div>`).join('');
+}
+
+function deleteContact(i){
+  const c=getContacts();c.splice(i,1);saveContacts(c);renderContactList();
+}
+
+function findContact(name){
+  const contacts=getContacts();
+  const q=name.toLowerCase().replace(/['']/g,'');
+  return contacts.find(c=>c.name.toLowerCase().includes(q)||q.includes(c.name.toLowerCase()))||null;
+}
+
+// ═══════════════════════════════════════
+// BATTERY
+// ═══════════════════════════════════════
+async function updateBattery(){
+  try{
+    const b=await navigator.getBattery();
+    const update=()=>{
+      const pct=Math.round(b.level*100);
+      document.getElementById('statBattery').textContent=`${pct}%`;
+      document.getElementById('headerBattery').textContent=`PIl: ${pct}%`;
+      const el=document.getElementById('statBattery');
+      el.className='stat-value '+(pct>50?'good':pct>20?'warn':'danger');
+    };
+    update();
+    b.addEventListener('levelchange',update);
+  }catch(e){document.getElementById('statBattery').textContent='N/A';}
+}
+updateBattery();
+
+// ═══════════════════════════════════════
+// WEATHER
+// ═══════════════════════════════════════
+async function fetchWeather(){
+  try{
+    const pos=await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res,rej,{timeout:6000}));
+    const{latitude:lat,longitude:lon}=pos.coords;
+    const r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&timezone=auto`);
+    const d=await r.json();
+    const temp=Math.round(d.current_weather.temperature);
+    const wmo=d.current_weather.weathercode;
+    const icon=wmo<=3?'☀️':wmo<=67?'🌧':wmo<=77?'❄️':'🌫';
+    document.getElementById('statWeather').textContent=`${temp}°C`;
+    window._weatherData={temp,icon,lat,lon};
+  }catch(e){document.getElementById('statWeather').textContent='Yok';}
+}
+fetchWeather();
+
+// ═══════════════════════════════════════
+// HEALTH
+// ═══════════════════════════════════════
+let _heartRate=parseInt(localStorage.getItem('jarvis_heart')||'72');
+let _steps=parseInt(localStorage.getItem('jarvis_steps')||'5000');
+document.getElementById('statHeart').textContent=`${_heartRate} BPM`;
+document.getElementById('statSteps').textContent=_steps.toLocaleString('tr');
+
+function saveHealthManual(){
+  const h=parseInt(document.getElementById('manualHeart').value);
+  const s=parseInt(document.getElementById('manualSteps').value);
+  if(h>0){_heartRate=h;localStorage.setItem('jarvis_heart',h);document.getElementById('statHeart').textContent=`${h} BPM`;}
+  if(s>0){_steps=s;localStorage.setItem('jarvis_steps',s);document.getElementById('statSteps').textContent=s.toLocaleString('tr');}
+  appendMessage('jarvis','Sağlık verileri güncellendi, Bay Stark.');
+  closeSettings();
+}
+
+// ═══════════════════════════════════════
+// TASKS
+// ═══════════════════════════════════════
+let tasks=JSON.parse(localStorage.getItem('jarvis_tasks')||'[]');
+function saveTasks(){localStorage.setItem('jarvis_tasks',JSON.stringify(tasks));}
+function addTask(text){tasks.push({id:Date.now(),text,done:false});saveTasks();}
+function toggleTask(id){const t=tasks.find(t=>t.id===id);if(t){t.done=!t.done;saveTasks();}}
+
+function renderTaskCard(){
+  if(tasks.length===0) return `<div class="task-card"><div class="task-card-label">// GÖREV LİSTESİ</div><p style="font-size:11px;color:var(--cyan-dim)">Görev yok.</p></div>`;
+  const items=tasks.map(t=>`
+    <li class="task-item">
+      <div class="task-check ${t.done?'done':''}" onclick="toggleTask(${t.id});refreshLastTaskCard()">${t.done?'✓':''}</div>
+      <span class="task-text ${t.done?'done':''}">${t.text}</span>
+    </li>`).join('');
+  return `<div class="task-card"><div class="task-card-label">// GÖREV LİSTESİ (${tasks.filter(t=>!t.done).length} bekliyor)</div><ul class="task-list">${items}</ul></div>`;
+}
+
+function refreshLastTaskCard(){
+  const all=document.querySelectorAll('.task-card');
+  if(all.length>0){
+    const last=all[all.length-1];
+    const pending=tasks.filter(t=>!t.done).length;
+    last.querySelector('.task-card-label').textContent=`// GÖREV LİSTESİ (${pending} bekliyor)`;
+    const items=tasks.map(t=>`
+      <li class="task-item">
+        <div class="task-check ${t.done?'done':''}" onclick="toggleTask(${t.id});refreshLastTaskCard()">${t.done?'✓':''}</div>
+        <span class="task-text ${t.done?'done':''}">${t.text}</span>
+      </li>`).join('');
+    last.querySelector('.task-list').innerHTML=items;
+  }
+}
+
+// ═══════════════════════════════════════
+// WHATSAPP — 2-step
+// ═══════════════════════════════════════
+let _waState=null;
+
+function isWAIntent(text){return /whatsapp|mesaj at|mesaj gönder|'[aeya]?\s*mesaj|yaz\s+[a-zA-ZğüşıöçĞÜŞİÖÇ]/i.test(text);}
+
+function extractWAName(text){
+  const m=text.match(/([a-zA-ZğüşıöçĞÜŞİÖÇ]{2,})[''']?(ye|e|a|ya|'ye|'e|'a|'ya)?\s*(mesaj at|yaz|gönder|söyle)/i);
+  return m?m[1]:null;
+}
+
+function makeWACard(name,num,msgText){
+  const encoded=encodeURIComponent(msgText||'');
+  const phone=(num||'').replace(/\D/g,'');
+  const href=phone?`https://wa.me/90${phone.replace(/^0/,'')}?text=${encoded}`:`https://wa.me/?text=${encoded}`;
+  const toLabel=name?`<b>${name}</b>${num?` (${num})`:''}`:'<i>(WhatsApp\'ta kişiyi seç)</i>';
+  return `<div class="wa-card">
+    <div class="wa-card-label">// WHATSAPP HAZIRLANDI</div>
+    <p>Alıcı: ${toLabel}<br>Mesaj: <b>"${msgText}"</b></p>
+    <a class="wa-btn" href="${href}" target="_blank">▶ WHATSAPP'TA AÇ</a>
+  </div>`;
+}
+
+// ═══════════════════════════════════════
+// GMAIL
+// ═══════════════════════════════════════
+function isGmailIntent(text){return /gmail|e-?mail|posta|gelen kutusu/i.test(text);}
+function makeGmailCard(text){
+  const action=/yeni|yaz|compose/i.test(text)?'compose':/gelen|inbox/i.test(text)?'inbox':'open';
+  const urls={open:'https://mail.google.com',inbox:'https://mail.google.com/mail/u/0/#inbox',compose:'https://mail.google.com/mail/u/0/#compose'};
+  return `<div class="gmail-card">
+    <div class="gmail-card-label">// GMAIL MODÜLü</div>
+    <p style="font-size:11px;color:#a0e8f8;margin-bottom:6px">Gmail hazır, Bay Stark.</p>
+    <div class="gmail-actions">
+      <a class="gmail-btn" href="${urls[action]}" target="_blank">▶ AÇ</a>
+      <a class="gmail-btn sec" href="${urls.compose}" target="_blank">✉ YENİ</a>
+      <a class="gmail-btn sec" href="${urls.inbox}" target="_blank">📥 INBOX</a>
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════
+// WEATHER CARD
+// ═══════════════════════════════════════
+function makeWeatherCard(){
+  const w=window._weatherData;
+  if(!w) return `<div class="weather-card"><div class="weather-card-label">// HAVA DURUMU</div><p style="font-size:11px;color:var(--cyan-dim)">Konum izni gerekli. ⚙ Ayarlardan izin verin.</p></div>`;
+  return `<div class="weather-card">
+    <div class="weather-card-label">// HAVA DURUMU — CANLI</div>
+    <div class="weather-big">${w.icon} ${w.temp}°C</div>
+    <p style="margin-top:6px;font-size:10px;color:var(--cyan-dim)">Koordinat: ${w.lat.toFixed(2)}° / ${w.lon.toFixed(2)}°</p>
+  </div>`;
+}
+
+// ═══════════════════════════════════════
+// HEALTH CARD
+// ═══════════════════════════════════════
+function makeHealthCard(){
+  return `<div class="health-card">
+    <div class="health-card-label">// SAĞLIK VERİLERİ</div>
+    <div class="health-grid">
+      <div class="health-item"><div class="health-val">${_heartRate}</div><div class="health-lbl">BPM NABIZ</div></div>
+      <div class="health-item"><div class="health-val">98%</div><div class="health-lbl">SpO2 OKSİJEN</div></div>
+      <div class="health-item"><div class="health-val">16</div><div class="health-lbl">SOLUNUM/dk</div></div>
+      <div class="health-item"><div class="health-val">${_steps.toLocaleString('tr')}</div><div class="health-lbl">ADIM</div></div>
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════
+// VOICE
+// ═══════════════════════════════════════
+let recognition=null,isListening=false;
+function initSpeech(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR)return null;
+  const r=new SR();
+  r.lang='tr-TR';r.continuous=false;r.interimResults=true;
+  r.onstart=()=>{isListening=true;document.getElementById('micBtn').classList.add('listening');document.getElementById('micBtn').textContent='🔴';document.getElementById('voiceStatus').classList.add('active');document.getElementById('userInput').placeholder='Dinliyorum...';};
+  r.onresult=(e)=>{
+    let interim='',final='';
+    for(let i=e.resultIndex;i<e.results.length;i++){const t=e.results[i][0].transcript;if(e.results[i].isFinal)final+=t;else interim+=t;}
+    document.getElementById('userInput').value=final||interim;
+    if(final){stopMic();setTimeout(()=>sendMessage(),300);}
+  };
+  r.onerror=(e)=>{stopMic();if(e.error==='not-allowed')appendMessage('jarvis','Mikrofon izni reddedildi. ⚙ Ayarlardan izin verin.');else if(e.error==='no-speech')appendMessage('jarvis','Ses algılanamadı, Bay Stark.');};
+  r.onend=()=>stopMic();
+  return r;
+}
+function toggleMic(){if(!isListening)startMic();else stopMic();}
+function startMic(){
+  if(!recognition)recognition=initSpeech();
+  if(!recognition){appendMessage('jarvis','Ses tanıma desteklenmiyor. Chrome kullanın.');return;}
+  try{recognition.start();}catch(e){}
+}
+function stopMic(){
+  isListening=false;
+  document.getElementById('micBtn').classList.remove('listening');
+  document.getElementById('micBtn').textContent='🎙';
+  document.getElementById('voiceStatus').classList.remove('active');
+  document.getElementById('userInput').placeholder='Komut girin veya 🎙 basın...';
+  try{recognition?.stop();}catch(e){}
+}
+
+// ═══════════════════════════════════════
+// SYSTEM PROMPT
+// ═══════════════════════════════════════
+function buildSystem(){
+  const contacts=getContacts();
+  const contactStr=contacts.length>0?contacts.map(c=>`${c.name}: ${c.num}`).join(', '):'Rehber boş.';
+  const taskStr=tasks.length>0?tasks.map(t=>`${t.done?'[TAMAM]':'[BEKLİYOR]'} ${t.text}`).join(', '):'Görev yok.';
+  const weather=window._weatherData?`${window._weatherData.temp}°C ${window._weatherData.icon}`:'Konum izni yok.';
+  return `Sen J.A.R.V.I.S. - Tony Stark'ın yapay zekâ sistemisin.
+
+KİŞİLİK: Resmi, zeki, "Bay Stark" diye hitap et. Kısa yanıtlar (1-3 cümle).
+
+GERÇEK VERİLER:
+- Saat: ${nowStr()}
+- Hava: ${weather}
+- Nabız: ${_heartRate} BPM | Adım: ${_steps.toLocaleString('tr')}
+- Görevler: ${taskStr}
+- Rehber: ${contactStr}
+
+MODÜLLER: WhatsApp (2 adımlı), Gmail, sağlık, görev, hava, sesli komut aktif.
+
+Türkçe, kısa ve askeri tonunda yanıt ver.`;
+}
+
+// ═══════════════════════════════════════
+// MAIN CHAT
+// ═══════════════════════════════════════
+let history=[];
+
+async function sendMessage(){
+  const input=document.getElementById('userInput');
+  const chatBox=document.getElementById('chatBox');
+  const text=input.value.trim();
+  if(!text)return;
+
+  appendMessage('user',text);
+  input.value='';
+
+  // WA step 2 — user gave message content
+  if(_waState&&_waState.step==='ask_msg'){
+    const contact=_waState.contact;
+    const card=makeWACard(contact?contact.name:_waState.name, contact?contact.num:null, text);
+    _waState=null;
+    history.push({role:'user',content:text});
+    const reply=`Anlaşıldı, Bay Stark. Mesaj hazırlandı. WhatsApp butonuna basın.`;
+    history.push({role:'assistant',content:reply});
+    appendMessage('jarvis',reply,card);
+    return;
+  }
+
+  // WA step 1 — detect intent
+  if(isWAIntent(text)){
+    const name=extractWAName(text);
+    const contact=name?findContact(name):null;
+    _waState={name,contact,step:'ask_msg'};
+    history.push({role:'user',content:text});
+    const toWho=contact?`<b>${contact.name}</b>`:name?`<b>${name}</b> (rehberde bulunamadı)`:'kişiye';
+    const reply=`${contact?contact.name:(name||'Kişi')}'e ne mesaj atmamı istersiniz, Bay Stark?`;
+    history.push({role:'assistant',content:reply});
+    appendMessage('jarvis',reply);
+    return;
+  }
+
+  // Gmail
+  if(isGmailIntent(text)){
+    history.push({role:'user',content:text});
+    const reply='Gmail modülü devreye alındı, Bay Stark.';
+    history.push({role:'assistant',content:reply});
+    appendMessage('jarvis',reply,makeGmailCard(text));
+    return;
+  }
+
+  // Weather
+  if(/hava|sıcaklık|derece/i.test(text)){
+    await fetchWeather();
+    history.push({role:'user',content:text});
+    const w=window._weatherData;
+    const reply=w?`Bulunduğunuz konumda ${w.temp}°C, Bay Stark.`:'Konum izni gerekli. ⚙ Ayarlardan verin.';
+    history.push({role:'assistant',content:reply});
+    appendMessage('jarvis',reply,makeWeatherCard());
+    return;
+  }
+
+  // Health
+  if(/nabız|sağlık|adım|oksijen|solunum|kalp/i.test(text)){
+    history.push({role:'user',content:text});
+    const reply=`Nabız ${_heartRate} BPM, normal sınırlar içinde, Bay Stark.`;
+    history.push({role:'assistant',content:reply});
+    appendMessage('jarvis',reply,makeHealthCard());
+    return;
+  }
+
+  // Task list
+  if(/görevlerim|ödevlerim|liste/i.test(text)){
+    history.push({role:'user',content:text});
+    const reply=tasks.filter(t=>!t.done).length>0?`${tasks.filter(t=>!t.done).length} bekleyen göreviniz var.`:'Görev listeniz temiz, Bay Stark.';
+    history.push({role:'assistant',content:reply});
+    appendMessage('jarvis',reply,renderTaskCard());
+    return;
+  }
+
+  // Add task
+  if(/ekle|kaydet|not al|ödev var|görev var|hatırlat/i.test(text)){
+    const taskText=text.replace(/ekle|kaydet|not al|hatırlat bana/gi,'').trim()||text;
+    addTask(taskText);
+    history.push({role:'user',content:text});
+    const reply=`"${taskText}" görev listesine eklendi, Bay Stark.`;
+    history.push({role:'assistant',content:reply});
+    appendMessage('jarvis',reply,renderTaskCard());
+    return;
+  }
+
+  // AI fallback
+  history.push({role:'user',content:text});
+  const typingEl=document.createElement('div');
+  typingEl.className='message jarvis';typingEl.id='typing';
+  typingEl.innerHTML=`<div class="avatar">AI</div><div><div class="sender-label">J.A.R.V.I.S.</div><div class="bubble"><div class="typing"><span></span><span></span><span></span></div></div></div>`;
+  chatBox.appendChild(typingEl);chatBox.scrollTop=chatBox.scrollHeight;
+
+  try{
+    const res=await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system:buildSystem(),messages:history})
+    });
+    const data=await res.json();
+    const reply=data.content?.map(c=>c.text||'').join('')||'Sistem hatası.';
+    history.push({role:'assistant',content:reply});
+    document.getElementById('typing')?.remove();
+    appendMessage('jarvis',reply);
+  }catch(e){
+    document.getElementById('typing')?.remove();
+    appendMessage('jarvis','Bağlantı hatası. Stark sunucularına erişilemiyor.');
+  }
+}
+
+function appendMessage(role,text,extra=''){
+  const chatBox=document.getElementById('chatBox');
+  const div=document.createElement('div');
+  div.className=`message ${role}`;
+  div.innerHTML=role==='jarvis'
+    ?`<div class="avatar">AI</div><div><div class="sender-label">J.A.R.V.I.S.</div><div class="bubble">${text}${extra}</div></div>`
+    :`<div class="avatar">T.S</div><div><div class="sender-label" style="text-align:right">BAY STARK</div><div class="bubble">${text}</div></div>`;
+  chatBox.appendChild(div);chatBox.scrollTop=chatBox.scrollHeight;
+}
+
+document.getElementById('userInput').addEventListener('keydown',e=>{if(e.key==='Enter')sendMessage();});
+</script>
+</body>
+</html>
